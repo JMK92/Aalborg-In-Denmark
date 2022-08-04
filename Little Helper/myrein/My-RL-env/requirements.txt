@@ -1,0 +1,4 @@
+controller==0.1.0
+gym==0.23.1
+numpy==1.17.4
+setuptools==45.2.0
