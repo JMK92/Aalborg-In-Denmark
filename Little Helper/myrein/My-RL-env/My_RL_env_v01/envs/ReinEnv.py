@@ -32,17 +32,17 @@ class ReinEnv(gym.Env):
         """[summary]
         """
         # Initialize Little Helper specifics
-        self.maxAngSpeed = 1   # 2.84 max
-        self.maxLinSpeedx = 0.14 # 0.22 max
-        self.maxLinSpeedy = 0.14 # 0.22 max
+        self.maxAngSpeed =1.0  # 2.84 max
+        self.maxLinSpeedx = 0.2 # 0.22 max
+        self.maxLinSpeedy = 0.2 # 0.22 max
         # Initialize reward parameters:
-        self.moveTowardsParam = 1
+        self.moveTowardsParam = 1.1
         self.moveAwayParam = 1.1
         self.safetyLimit = 0.5
         self.obsProximityParam = 0.01
         self.faceObstacleParam = 10
         self.EOEPunish = -100
-        self.EOEReward = 300
+        self.EOEReward = 350
         # Total reward counter for each component
         self.moveTowardGoalTotalReward = 0
         self.obsProximityTotalPunish = 0
@@ -59,8 +59,10 @@ class ReinEnv(gym.Env):
         self.action = [0, 0, 0]  # Current action chosen
         self.prevAction = [0,0, 0]  # Past action chosen
         self.goal = []  # Goal
-        self.goals = [x/100 for x in range(450,451,150)]
-        #self.goals = [[0.72, 6.78],[5.03, 6.78],[12.7, 6.78], [10.9, -1.68], [3, 0],[-11.5, -2.5]]
+        self.goals = [x/100 for x in range(600,651,150)]
+        #self.last_goal_x = self.goals[0]
+        #self.last_goal_y = self.goals[1]
+        #self.goals = [[0.72, 6.78],[5.03, 6.78],[10.7, 6.78], [10.9, -1.68], [3, 0],[-11.5, -2.5]]
         self.seeded = False
         self.dist = 0  # Distance to the goal
         self.prevDist = 0  # Previous distance to the goal
@@ -83,7 +85,7 @@ class ReinEnv(gym.Env):
         #self.lidar_1 = self.supervisor.getLidar('lidar_1_1')        
         self.lidar = self.supervisor.getDevice('lidar_1_1')
         self.lidar_2 = self.supervisor.getDevice('lidar_2_1')
-        self.lidarDiscretization = 2
+        self.lidarDiscretization = 6
         self.lidar.enable(self.timeStep)
         self.lidar_2.enable(self.timeStep)
         self.lidarRanges = []
@@ -110,7 +112,7 @@ class ReinEnv(gym.Env):
         # Initialize action-space and observation-space
         self.action_space = spaces.Box(low=np.array([-self.maxLinSpeedx, -self.maxLinSpeedy,-self.maxAngSpeed]),
                                        high=np.array([self.maxLinSpeedx, self.maxLinSpeedy,self.maxAngSpeed]), dtype=np.float32)
-        self.observation_space = spaces.Box(low=-10, high=10, shape=(365,), dtype=np.float16)
+        self.observation_space = spaces.Box(low=-25, high=25, shape=(125,), dtype=np.float16)
     
     def reset(self):
         """[summary]
@@ -127,7 +129,7 @@ class ReinEnv(gym.Env):
         self.goal = self._setGoal() # Set Goal
         self._resetObject(self.goalObject, [self.goal[0],  self.goal[1], 0.01])
         self._getState()
-        self.startPosition = self.position[:]
+        self.startPosition = self.position[:]        
         self.state = [self.prevAction[0], self.prevAction[1], self.prevAction[2], self.dist, self.direction] + self.lidarRanges + self.lidarRanges2# Set State
         #self.state = [self.dist, self.direction] + self.lidarRanges # Set State
         return np.asarray(self.state)
@@ -202,19 +204,19 @@ class ReinEnv(gym.Env):
           while True:
             if self.restrictedGoals:
               gs = random.sample(self.goals,1)
-              gs.append(random.randrange(-45, 45)/10)
+              gs.append(random.randrange(-60, 60)/10)
               g = gs[:] if np.random.randint(2) == 0 else [gs[1], gs[0]]
             elif self.boxEnv:
-              xGoal = random.randrange(-40, -25)/10 if np.random.randint(2) == 0 else random.randrange(25, 40)/10
-              yGoal = random.randrange(-40, 40)/10
+              xGoal = random.randrange(-60, 60)/10 if np.random.randint(2) == 0 else random.randrange(25, 40)/10
+              yGoal = random.randrange(-60, 60)/10
               g = [yGoal, xGoal] if np.random.randint(2) == 0 else [xGoal, yGoal]
             else: 
-              xGoal = random.randrange(-40, 40)/10
-              yGoal = random.randrange(-40, 40)/10
+              xGoal = random.randrange(-60, 60)/10
+              yGoal = random.randrange(-60, 60)/10
               g = [xGoal, yGoal]
             pos1 = self.robot.getPosition()[0]
             pos2 = self.robot.getPosition()[1]
-            distFromGoal = ((g[0]-pos1)**2 + (g[1]-pos2)**2)**0.5
+            distFromGoal = ((g[0]-pos1)**2 + (g[1]-pos2)**2)**0.5           
             if distFromGoal >= 1:
               break
         else:
@@ -259,23 +261,22 @@ class ReinEnv(gym.Env):
             return True, 0
         minScan = min(list(filter(lambda a: a != 0, self.lidarRanges[:]))) # Check LiDar
         minScan2 = min(list(filter(lambda a: a != 0, self.lidarRanges2[:])))
-        if minScan  < 0.2:
-        #if self.dist < 0.2:
+        if minScan  < 0.2 or minScan2  < 0.2:       
             self.needReset = True
             self._endEpisode('collision')
-            print('In collision')
-            print('Min distance ', minScan)
+            #print('In collision')
+            print('Min distance ', minScan)            
             return True, self.EOEPunish
-        elif minScan2  < 0.2:
+       # elif minScan2  < 0.2:
         #if self.dist < 0.2:
-            self.needReset = True
-            self._endEpisode('collision')
-            print('In collision')
-            print('Min distance ', minScan)
-            return True, self.EOEPunish
-        elif self.dist < 0.35: # Check Goal
-            self.needReset = True if self.boxEnv else False
-            self._endEpisode('success')
+           # self.needReset = True
+            #self._endEpisode('collision')
+            #print('In collision')
+            #print('Min distance ', minScan)
+            #return True, self.EOEPunish
+        elif self.dist < 0.44: # Check Goal
+            self.needReset = False if self.boxEnv else False
+            self._endEpisode('success')                       
             print('We reached the goal')
             return True, self.EOEReward
         else:
@@ -318,17 +319,17 @@ class ReinEnv(gym.Env):
         Returns:
             [type] -- [description]
         """
-        R = 0.1         # Wheel radius
-        L = 0.1#0.01(middle wheel) + # Wheelbase length
+        R = 0.05         # Wheel radius
+        L = 0.15 #0.01(middle wheel) + # Wheelbase length
         H = 0.1
-        v1 = (linearVy-linearVx - angularV * (L+H)) / (R)
-        v2 = (linearVy-linearVx + angularV * (L+H)) / (R)
-        v3 = (linearVy-linearVx - angularV * (L+H)) / (R)
-        v4 = (linearVy-linearVx + angularV * (L+H)) / (R)
+        v1 = (linearVx-linearVy - angularV * (L+H)) / (R)          
+        v2 = (linearVx+linearVy + angularV * (L+H)) / (R)
+        v3 = (linearVx-linearVy + angularV * (L+H)) / (R)
+        v4 = (linearVx+linearVy - angularV * (L+H)) / (R)
       
         #print('\nCommanded linear:\t{} angular:\t {}'.format(linearV, angularV))
         #print('Calculated right wheel:\t{}, left wheel:\t {}'.format(vr, vl))
-        return [v4, v2, v1, v3]    
+        return [v4, v2, v3, v1]    
 
     def _getDirection(self):
         """[summary]
@@ -339,10 +340,11 @@ class ReinEnv(gym.Env):
         # Get direction of goal from Robot
         robgoaly = self.goal[1] - self.position[1]       
         robgoalx = self.goal[0] - self.position[0]
-        goal_angle = math.atan2(robgoalx, robgoaly)
+        goal_angle = math.atan2(robgoaly, robgoalx)
         #print(robgoaly, robgoalx, goal_angle)
         # Get difference between goal direction and orientation
         heading = goal_angle - self.orientation
+        
         if heading > pi:        # Wrap around pi
             heading -= 2 * pi
         elif heading < -pi:
@@ -386,7 +388,7 @@ class ReinEnv(gym.Env):
         faceObstaclePunish = -self._rewardFacingObstacle()
         self.faceObstacleTotalPunish += faceObstaclePunish
         
-        reward = moveTowardsGoalReward + obsProximityPunish + faceObstaclePunish
+        reward = moveTowardsGoalReward + obsProximityPunish #+ faceObstaclePunish
         
         #self._printMax(moveTowardsGoalReward)
         totalRewardDic = {"faceObstacleTotalPunish":self.faceObstacleTotalPunish, "obsProximityTotalPunish":self.obsProximityTotalPunish, "moveTowardGoalTotalReward":self.moveTowardGoalTotalReward}
@@ -412,11 +414,12 @@ class ReinEnv(gym.Env):
             rewardFaceObs += scale*(1-(self.lidarRanges[i]/self.safetyLimit)) if self.lidarRanges[i] < self.safetyLimit else 0
         return self.faceObstacleParam*rewardFaceObs  
         
+        rewardFaceObs2 = 0
         lidarRange2 = [-2,2] if self.action[0] or self.action[1] >= 0 else [4,8]
         for i in range(lidarRange2[0],lidarRange2[1]):
             scale = 0.15 if i in [-2,1,4,7] else 0.35 #Side readings get less weight
             rewardFaceObs += scale*(1-(self.lidarRanges2[i]/self.safetyLimit)) if self.lidarRanges2[i] < self.safetyLimit else 0
-        return self.faceObstacleParam*rewardFaceObs      
+        return self.faceObstacleParam*rewardFaceObs2      
     
     def _rewardMoveTowardsGoal(self, distRate):
         """[summary]
@@ -501,10 +504,11 @@ class ReinEnv(gym.Env):
         else:
             self.currentEpisode += 1
         print('\n\t\t\t\t EPISODE No. {} \n'.format(self.currentEpisode))
-        self.start = time.time()
+        #self.start = time.time()
         if self.needReset: # Reset object(s) / counters / rewards
             print('Resetting Robot...')
             self._resetObject(self.robot, self.robotResetLocation) 
+            #self._resetObject(self.goal, self._setGoal)
         self.counter = 0
         self.totalreward = 0
         self.moveTowardGoalTotalReward = 0
